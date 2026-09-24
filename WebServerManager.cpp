@@ -505,6 +505,29 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
     <button class="btn btn-p" onclick="saveWifi()">Speichern</button>
   </div>
 
+  <!-- "WLAN dauerhaft an" - schaltet den AP beim Booten fest ein und haelt
+       ihn dauerhaft an; ueberstimmt GPIO13-Bootpin, den manuellen Schalter
+       und den Auto-Failsafe weiter unten komplett (siehe config.WifiAlwaysOn
+       in config.h, wifiFailsafeCheck()/setup() in ESP32-RC-Sound.ino).
+       Default AN. -->
+  <div class="card" id="c-wifi-always" style="margin-top:10px">
+    <div class="card-title">WLAN dauerhaft aktiv (empfohlen)</div>
+    <div class="row" style="margin-bottom:10px">
+      <span class="lbl">Beim Start an, bleibt dauerhaft an</span>
+      <input type="checkbox" id="w-always-on" onchange="onWifiAlwaysOnChange()">
+    </div>
+    <button class="btn btn-p" onclick="saveWifi()">Speichern</button>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px">
+      Modul ist nach jedem Einschalten sofort per WLAN erreichbar, ohne
+      GPIO13-Bootpin oder manuellen Schalter. Ist diese Option aktiv, wirken
+      "WLAN automatisch bei Signalverlust" weiter unten sowie der GPIO13-
+      Bootpin nicht mehr (dort ausgegraut). Eine Aenderung hier wird zwar
+      sofort gespeichert, wirkt sich aber wie die anderen Einstellungen auf
+      dieser Seite erst ab dem naechsten Neustart des Moduls aus - das WLAN
+      bleibt also bis dahin im aktuellen Zustand.
+    </div>
+  </div>
+
   <!-- Manueller WLAN-Schalter - schaltet den AP sofort ein/aus, ohne
        Neustart und ohne das Boot-Verhalten (WifiPin/GPIO13) zu aendern
        (siehe handleApiWifiEnable() in WebServerManager.cpp). -->
@@ -527,6 +550,9 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
        ESP32-RC-Sound.ino) - z.B. wenn kein Sender gebunden ist. -->
   <div class="card" id="c-wifi-auto" style="margin-top:10px">
     <div class="card-title">WLAN automatisch bei Signalverlust</div>
+    <div id="wifi-auto-overridden-hint" class="hidden" style="font-size:12px;color:var(--yellow);margin-bottom:8px">
+      Wirkungslos, solange "WLAN dauerhaft aktiv" oben eingeschaltet ist.
+    </div>
     <div class="row" style="margin-bottom:10px">
       <span class="lbl">Aktivieren</span>
       <input type="checkbox" id="w-auto-enable">
@@ -858,10 +884,14 @@ function loadConfig(){
     var w=cfg.wifi;
     sv('w-ssid',w.ssid); sv('w-pass',w.pass||'');
     sv('w-ip',w.ip); sv('w-dev',w.device);
+    // "WLAN dauerhaft an" (persistiert, siehe c-wifi-always) - Default AN
+    var wao=document.getElementById('w-always-on');
+    if(wao) wao.checked = (w.always_on===undefined) ? true : !!w.always_on;
     // WLAN-Failsafe-Einstellungen (persistiert, siehe c-wifi-auto)
     var wae=document.getElementById('w-auto-enable');
     if(wae) wae.checked = !!w.auto_enable;
     sv('w-auto-timeout', w.auto_timeout);
+    onWifiAlwaysOnChange();
     var sp=cfg.sport;
     sv('pid0',sp.poll_id0); sv('pid1',sp.poll_id1);
   });
@@ -1159,9 +1189,11 @@ function saveSettings(){
   // PWM nur bei V1/V2 senden (bei V3/V4 nicht vorhanden)
   if(gi('hw-cfg')<2){d.pwm_min=gi('pwm-min');d.pwm_max=gi('pwm-max');}
   xpost('/api/config',d,function(r){
-    // Kein zusaetzliches /save noetig - handleApiConfigPost() ruft
-    // serverseitig bereits sofort saveConfigForce() auf (anders als
-    // /api/sound, das nur markDirty() setzt).
+    // Kein zusaetzliches /save noetig - handleApiConfigPost() markiert die
+    // Konfiguration serverseitig als "dirty", der eigentliche NVS-Schreib-
+    // vorgang folgt automatisch ueber die debounced+cooldown-geschuetzte
+    // Pruefung in loop() (seit v7.16, siehe dortigen Kommentar) - genau wie
+    // bei /api/sound.
     try{var p=JSON.parse(r);if(p.ok){
       // Komplett neu von /api/config laden statt nur die gerade gesendeten
       // Felder lokal zu uebernehmen: "restart_pending" wird vom Server
@@ -1385,14 +1417,27 @@ function uploadOtaFile(file){
   document.getElementById('ota-file').value='';
 }
 
+// Graut die Auto-Failsafe-Karte aus, solange "WLAN dauerhaft an" aktiv ist -
+// diese Einstellungen wirken dann nicht (siehe wifiFailsafeCheck()).
+function onWifiAlwaysOnChange(){
+  var always = document.getElementById('w-always-on');
+  var on = always ? always.checked : false;
+  var hint = document.getElementById('wifi-auto-overridden-hint');
+  if(hint) hint.className = on ? '' : 'hidden';
+  ['w-auto-enable','w-auto-timeout'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){ el.disabled=on; el.style.opacity = on ? '0.5' : '1'; }
+  });
+}
 function saveWifi(){
   var d={ ssid:gv('w-ssid'), pass:gv('w-pass'), ip:gv('w-ip'), device:gv('w-dev'),
+          wifi_always_on: document.getElementById('w-always-on').checked?1:0,
           wifi_auto_enable: document.getElementById('w-auto-enable').checked?1:0,
           wifi_auto_timeout: gi('w-auto-timeout') };
   xpost('/api/config',d,function(r){
     try{var p=JSON.parse(r);if(p.ok){
       if(cfg.wifi) cfg.wifi=Object.assign(cfg.wifi,{ssid:d.ssid,pass:d.pass,ip:d.ip,device:d.device,
-        auto_enable:d.wifi_auto_enable,auto_timeout:d.wifi_auto_timeout});
+        always_on:d.wifi_always_on,auto_enable:d.wifi_auto_enable,auto_timeout:d.wifi_auto_timeout});
       toast('WiFi gespeichert');return;}}catch(e){}
     toast('Fehler',1);
   });
@@ -1444,9 +1489,26 @@ loadSoundFileStatus(); // Datei-Status initial laden (Tab "Motor" ist beim Start
 </html>)HTML";
 
 
-WebServer  WebServerManager::server(80);
-int        WebServerManager::Menu        = 0;
-String     WebServerManager::valueString = "";
+WebServer     WebServerManager::server(80);
+int           WebServerManager::Menu             = 0;
+String        WebServerManager::valueString      = "";
+unsigned long WebServerManager::lastSdActivityMs = 0;
+
+// v7.16: Cooldown-Dauer nach einer SD-Schreiboperation, bevor der naechste
+// blockierende NVS-Flash-Schreibvorgang (saveConfigForce(), siehe loop() in
+// ESP32-RC-Sound.ino) zugelassen wird. Feldbefund: ohne Stuetzkondensator am
+// Modul (Versorgung ueber lange, duenne SBUS-Leitung vom Empfaenger-BEC)
+// reichte ein SD-Upload direkt gefolgt von einem sofortigen Config-Save aus,
+// um einen Brownout-Reset-Loop auszuloesen; ein paar Sekunden Abstand (in
+// der Praxis durch Umschalten zwischen Sound-Slots erzeugt) behoben es
+// zuverlaessig. 3000ms bildet das nach.
+static constexpr unsigned long SD_SAVE_COOLDOWN_MS = 3000;
+
+void WebServerManager::markSdActivity() { lastSdActivityMs = millis(); }
+
+bool WebServerManager::sdActivityCooldownActive() {
+  return lastSdActivityMs != 0 && (millis() - lastSdActivityMs) < SD_SAVE_COOLDOWN_MS;
+}
 
 extern bool          Sound_on_web[RCSOUND_NUM_SLOTS]; // v5: 25 statt 9
 extern uint16_t      channel_output[16];
@@ -1738,6 +1800,18 @@ void WebServerManager::handleApiConfigPost() {
   // NICHT hierueber, sondern ueber /api/wifi_enable).
   if (jsonGetInt(body, "wifi_auto_enable",  v)) { config.WifiAutoEnable     = constrain(v,0,1) ? true : false; changed=true; }
   if (jsonGetInt(body, "wifi_auto_timeout", v)) { config.WifiAutoTimeoutSec = (uint16_t)constrain(v,5,240);    changed=true; }
+  // "WLAN dauerhaft an" (siehe config.h) - rein persistierte Einstellung wie
+  // 175/176 (Auto-Failsafe) oder portb_mode/portc_gps oben: wirkt erst ab
+  // dem naechsten Bootvorgang, KEIN sofortiges enableAP() hier. Bewusst so
+  // (seit v7.15) - ein WLAN-Start zur Laufzeit ist historisch die
+  // fehleranfaelligste Operation in diesem Projekt (Heap-Fragmentierung,
+  // siehe SDCardInit()-Kommentar in ESP32-RC-Sound.ino); ein Aufruf aus
+  // diesem HTTP-Handler heraus ist dafuer unnoetiges zusaetzliches Risiko,
+  // da der AP durch den Default "an" beim Booten ohnehin schon laeuft.
+  if (jsonGetInt(body, "wifi_always_on", v)) {
+      config.WifiAlwaysOn = constrain(v,0,1) ? true : false;
+      changed = true;
+  }
 
   // S.Port Poll-IDs (Hex-String "A1" → uint8_t 0xA1)
   { char tmp[8];
@@ -1747,7 +1821,15 @@ void WebServerManager::handleApiConfigPost() {
       { config.sport_poll_id[1]=(uint8_t)strtol(tmp,nullptr,16); changed=true; }
   }
 
-  if (changed) { markDirty(); saveConfigForce(); }
+  // v7.16: nur noch markDirty() statt eines sofortigen, blockierenden
+  // saveConfigForce() hier im HTTP-Handler - der eigentliche NVS-Schreib-
+  // vorgang passiert jetzt ausschliesslich ueber die debounced Pruefung in
+  // loop() (ESP32-RC-Sound.ino), die zusaetzlich einen SD-Aktivitaets-
+  // Cooldown beachtet (siehe sdActivityCooldownActive()). Aendert nichts an
+  // der Persistenz (spaetestens ~500ms-3.5s spaeter gespeichert), reduziert
+  // aber das Risiko eines Brownouts, wenn kurz zuvor auf die SD-Karte
+  // geschrieben wurde.
+  if (changed) { markDirty(); }
   sendOk(server);
 }
 
@@ -1837,7 +1919,8 @@ String WebServerManager::buildConfigJson() {
   // (gerade an/aus, RC-Signal da/weg) steht bewusst NICHT hier, sondern in
   // /api/debug (haeufiger abgefragt, siehe handleApiDebug()).
   j += "\"auto_enable\":"  + String(config.WifiAutoEnable ? 1 : 0)   + ",";
-  j += "\"auto_timeout\":" + String(config.WifiAutoTimeoutSec)      + "},";
+  j += "\"auto_timeout\":" + String(config.WifiAutoTimeoutSec)      + ",";
+  j += "\"always_on\":"    + String(config.WifiAlwaysOn ? 1 : 0)    + "},";
 
   j += "\"version\":\"" + String(versionString) + "\"";
   j += "}";
@@ -1991,6 +2074,8 @@ void WebServerManager::handleApiSdDelete() {
   }
   bool ok = SD.remove(path);
   sdMutexGive();
+  // v7.16: siehe Kommentar bei markSdActivity().
+  markSdActivity();
 
   if (ok) {
     sendJson(server, "{\"ok\":true,\"file\":\"" + name + "\"}");
@@ -2281,6 +2366,11 @@ void WebServerManager::handleApiSoundUploadData() {
     if (target) target->LoadWavFile();
     // v7.11: die fuer den Upload freigegebenen Motor-Handles wieder oeffnen.
     restoreSoundHandles(motorMask);
+    // v7.16: Cooldown fuer den naechsten Config-Save starten (siehe
+    // markSdActivity()/SD_SAVE_COOLDOWN_MS oben) - unabhaengig davon, ob der
+    // Upload erfolgreich war oder abgebrochen wurde, es wurde in jedem Fall
+    // gerade auf die SD-Karte geschrieben.
+    markSdActivity();
   }
 }
 
@@ -2380,6 +2470,9 @@ void WebServerManager::handleApiSoundDelete() {
   // weiter, also neu laden statt stumm zu bleiben.
   if (target) target->LoadWavFile();
   restoreSoundHandles(motorMask);
+  // v7.16: siehe Kommentar bei markSdActivity() - gilt fuer Loeschen genauso
+  // wie fuer Upload.
+  markSdActivity();
 
   if (ok) {
     sendJson(server, "{\"ok\":true,\"file\":\"" + name + "\",\"existed\":" + String(existed ? "true" : "false") + "}");
@@ -2666,7 +2759,11 @@ void WebServerManager::handleRequest() {
   // Arrays schreiben kann.
   uint8_t safeMenu = (uint8_t)constrain(Menu, 0, RCSOUND_NUM_SLOTS - 1);
   if (uri == "/Sound/on")  { Sound_on_web[safeMenu] = true; }
-  if (uri == "/save")      { markDirty(); saveConfigForce(); }
+  // v7.16: kein sofortiges saveConfigForce() mehr hier (siehe Kommentar bei
+  // handleApiConfigPost()) - nur noch markDirty(), der eigentliche Schreib-
+  // vorgang laeuft ueber die debounced+cooldown-geschuetzte Pruefung in
+  // loop().
+  if (uri == "/save")      { markDirty(); }
   if (uri == "/reset")     { Reset_all(); }
   if (uri == "/setsbus")   { set_sbus(); }
   if (uri == "/setpwm")    { set_pwm(); }

@@ -167,7 +167,7 @@ CI baut bei jedem Push die Firmware und führt die Host-Tests aus.
 
 ## Versionsstand
 
-Aktuell: **v7.13**
+Aktuell: **v7.17**
 
 Wichtige Schritte der V7-Linie:
 
@@ -178,6 +178,10 @@ Wichtige Schritte der V7-Linie:
 | 7.06 | Sound-Upload abgesichert: Datei wird vor dem Ersetzen geschlossen und danach neu geladen |
 | 7.07 – 7.10 | **Zurückgezogen** — `max_files`-Anhebung zerstörte den WLAN-Start (siehe oben) |
 | 7.11 – 7.13 | Rücknahme, Handle-Freigabe statt Reservierung, Upload-Diagnose, Klartext-Fehlermeldungen |
+| 7.14 | Neu: "WLAN dauerhaft an" (`config.WifiAlwaysOn`, Default AN, CRSF/Lua-Feld 181) |
+| 7.15 | Kein sofortiger `enableAP()`-Aufruf mehr aus Web-/CRSF-Handlern (Risikominimierung) |
+| 7.16 | SD-Aktivitäts-Cooldown vor NVS-Schreibvorgängen (Feldbefund: Brownout-Reset-Loop bei ungepuffertem Modul ohne Stützkondensator direkt nach SD-Schreibzugriff); alle Config-Speicherpfade vereinheitlicht über den debounced Schreibvorgang in `loop()` |
+| 7.17 | Fix: Lautstärkeänderung während einer laufenden Web-Testwiedergabe (Sound-Slots 1–24) wirkte bisher erst beim nächsten Trigger, nicht auf die bereits laufende Wiedergabe (`handleSound()`) |
 
 Die vollständige Historie ab v5.1 steht in der Projektbeschreibung (`ESP32-RC-Sound-V7-Projektbeschreibung-*.docx`).
 

@@ -97,7 +97,7 @@
    ── CRSF-/Lua-Parametermenue ───────────────────────────────────────────
    Bei RC-System ELRS (CRSF) ist das Modul zusaetzlich vollstaendig ueber
    das native CRSF-Parametermenue des Senders konfigurierbar (z.B. als
-   Lua-Script in EdgeTX). CRSF_PARAM_COUNT Feld-IDs, lueckenlos 1..180 -
+   Lua-Script in EdgeTX). CRSF_PARAM_COUNT Feld-IDs, lueckenlos 1..181 -
    die vollstaendige Feldliste steht direkt beim Parameter-System weiter
    unten. Jedes Modul erhaelt seine CRSF-Busadresse (0xC0+WM-Adresse) und
    seinen Telemetrie-Zeitslot aus der WM-Adresse (Wilhelm-Meier-Schema),
@@ -130,7 +130,7 @@
 #include "gps_speed.h"   // GPS-Geschwindigkeit (Port C)
 #include "port_function.h"   // Port-B-Rollen-Registry
 
-uint16_t Version = 713;  // Firmware-Version fuer Web-/Lua-Anzeige: major*100+minor (713 -> "7.13")
+uint16_t Version = 717;  // Firmware-Version fuer Web-/Lua-Anzeige: major*100+minor (717 -> "7.17")
 char versionString[6];
 bool gpsPinConflict = false; // true, wenn Port C (GPS) UND SBUS gleichzeitig gewaehlt sind (GPIO27-Konflikt, siehe setup())
 // Ob der AP gerade aktiv ist, wird NICHT hier gespiegelt: loop() fragt dafuer
@@ -325,7 +325,7 @@ static void crsfWriteParam(uint8_t idx, uint8_t val);
 //  Sound s(1-24): fi=16+(s-1)*6  → endet bei 159
 //   fi+0:Folder fi+1:Sel Quelle fi+2:U8 Kanal fi+3:U8 Vol fi+4:Sel Mode fi+5:Sel Test
 //
-//  160: Folder Einstellungen {161..169, 171..180}
+//  160: Folder Einstellungen {161..169, 171..181}
 //   161:Sel RC-Sys  162:U8 ModAdr  163:U8 EKKanal  164:Sel EKMode
 //   165:Sel HardwareConfig  V1;V2;V3  (siehe config.h)
 //   166:U8 PWM min(/16)  167:U8 PWM max(/16)
@@ -341,8 +341,10 @@ static void crsfWriteParam(uint8_t idx, uint8_t val);
 //   179:U8 SBUS Gruppe2 Kanal (255=aus)  180:Sel SBUS Gruppe2 Adresse  Adr0-3
 //   (177-180: SBUS-Pendant zu 168/169, siehe EK_Gruppen_Adresse/
 //   SBUS_Gruppen_Channel in config.h)
+//   181:Sel WLAN dauerhaft an  Aus;Ein  (persistiert, siehe config.WifiAlwaysOn;
+//   Default AN - ueberstimmt 174/175/176 komplett, siehe wifiFailsafeCheck())
 
-static constexpr uint8_t CRSF_PARAM_COUNT = 180;   // Field-IDs lueckenlos 1..180 (170 Root-Info, 171-180 in Folder 160)
+static constexpr uint8_t CRSF_PARAM_COUNT = 181;   // Field-IDs lueckenlos 1..181 (170 Root-Info, 171-181 in Folder 160)
 
 // ── CRSF-Geraeteadresse + Ping-Slot aus der WM-Adresse (Wilhelm-Meier-Schema) ──
 // Jedes Modul bekommt eine eindeutige CRSF-Bus-Adresse aus 0xC0..0xCF.
@@ -610,7 +612,7 @@ static void crsfSendParam(uint8_t idx) {
 
     // ── Einstellungen (160..169) ──────────────────────────────────────────
     else if(idx==160) crsf.send_param_response_CRSF_FOLDER(160,0,"Einstellungen",
-        {161,162,163,164,165,166,167,168,169,171,172,173,174,175,176,177,178,179,180});
+        {161,162,163,164,165,166,167,168,169,171,172,173,174,175,176,177,178,179,180,181});
     else if(idx==161) crsf.send_param_response_CRSF_TEXT_SELECTION(161,160,
         "RC-System","FrSky;FlySky;ELRS SBUS;Hott;ELRS CRSF",
         (uint8_t)constrain(config.Einkanal_RC_System,0,4),0,4);
@@ -679,6 +681,14 @@ static void crsfSendParam(uint8_t idx) {
         config.WifiAutoEnable?1:0,0,1);
     else if(idx==176) crsf.send_param_response_CRSF_UINT8(176,160,"Auto-WLAN Timeout (s)",
         (uint8_t)constrain(config.WifiAutoTimeoutSec,5,240),5,240,"");
+
+    // 181: "WLAN dauerhaft an" - Default AN, ueberstimmt 174/175/176
+    // vollstaendig (siehe wifiFailsafeCheck()/setup()). Bewusst als
+    // eigenstaendiges, neu angehaengtes Feld statt Umbau von 174-176, damit
+    // bestehende Radio-Profile/Lua-Skripte mit festen Feld-IDs weiterlaufen.
+    else if(idx==181) crsf.send_param_response_CRSF_TEXT_SELECTION(181,160,
+        "WLAN dauerhaft an","Aus;Ein",
+        config.WifiAlwaysOn?1:0,0,1);
 
     // ── SBUS-Gruppenkanaele fuer "MKan" (SBUS-Pendant zu 168/169) ────────
     // 177/179: je ein fest zugewiesener SBUS-Kanal (255=aus) fuer eine der
@@ -802,6 +812,16 @@ static void crsfWriteParam(uint8_t idx, uint8_t val) {
     else if(idx==178){config.SBUS_Gruppen_Mode[0]=(val==0)?0:constrain((int)val+9,10,13);markDirty();}
     else if(idx==179){config.SBUS_Gruppen_Channel[1]=(val==255)?999:constrain(val,0,15);markDirty();}
     else if(idx==180){config.SBUS_Gruppen_Mode[1]=(val==0)?0:constrain((int)val+9,10,13);markDirty();}
+    // 181: "WLAN dauerhaft an" - rein persistierte Einstellung wie 175/176,
+    // KEIN sofortiges enableAP() (anders als der Sofort-Schalter 174).
+    // Wirkt erst ab dem naechsten Bootvorgang. Bewusst so (seit v7.15) - ein
+    // WLAN-Start zur Laufzeit ist historisch die fehleranfaelligste
+    // Operation in diesem Projekt (Heap-Fragmentierung), ein Aufruf direkt
+    // aus dem CRSF-Parameter-Handler heraus ist dafuer unnoetiges Risiko,
+    // da der AP durch den Default "an" beim Booten ohnehin schon laeuft.
+    else if(idx==181){
+        config.WifiAlwaysOn=constrain(val,0,1);markDirty();
+    }
 }
 
 // ======== Setup ======================================================
@@ -854,7 +874,15 @@ void setup() {
     // enableAP() (siehe WebServerManager.h/.cpp).
     WebServerManager::begin(ssid, password);
 
-    if (!digitalRead(WifiPin)) {
+    // "WLAN dauerhaft an" (config.WifiAlwaysOn, Default AN, siehe config.h)
+    // schaltet den AP unconditional ein und ueberstimmt damit den
+    // GPIO13-Bootpin komplett - wer den Pin-Bootmodus weiterhin will, muss
+    // die Option zuerst explizit ausschalten (Web-Tab "WiFi" oder CRSF/Lua-
+    // Feld 181).
+    if (config.WifiAlwaysOn) {
+        Serial.println("WLAN dauerhaft aktiv (config.WifiAlwaysOn) - schalte AP ein...");
+        WebServerManager::enableAP();
+    } else if (!digitalRead(WifiPin)) {
         Serial.println("AP Modus (WifiPin beim Booten auf LOW)...");
         WebServerManager::enableAP();
     }
@@ -937,10 +965,20 @@ void setup() {
 // AllocateSoundBuffers()) laeuft mit potenziell staerker fragmentiertem
 // Heap - historisch die fehleranfaelligste Operation in dieser Codebase.
 // enableAP() loggt deshalb bei jedem Aufruf den freien Heap vor dem Start.
+//
+// "WLAN dauerhaft an" (config.WifiAlwaysOn, siehe config.h/setup()) schaltet
+// den AP bereits beim Booten fest ein - diese Funktion greift dann gar nicht
+// mehr ein, siehe Abbruch ganz oben.
 void wifiFailsafeCheck() {
     static unsigned long busLostSinceMs = 0;
     static bool          busLostSincePending = false;
 
+    if (config.WifiAlwaysOn) {
+        // WLAN ist per Konfiguration dauerhaft an (siehe setup()) - hier ist
+        // nichts mehr zu tun, unabhaengig vom RC-Signal.
+        busLostSincePending = false;
+        return;
+    }
     if (BUS_OK) {
         busLostSincePending = false;
         return;
@@ -1059,7 +1097,20 @@ void loop() {
     // Aenderung ging bei schnellem Ausschalten verloren), aber lang genug, dass
     // schnelle Schieberegler-Bursts weiterhin zu einem einzigen Schreibvorgang
     // gebuendelt werden (der Timer wird bei jeder Aenderung zurueckgesetzt).
-    if(configDirty&&(millis()-configDirtyMs)>=500UL) saveConfigForce();
+    // v7.16: zusaetzlich zurueckgehalten, solange seit einer SD-Schreib-
+    // aktivitaet (Sound-Upload/-Loeschen) noch der Cooldown laeuft (siehe
+    // WebServerManager::sdActivityCooldownActive()) - Feldbefund: ohne
+    // Stuetzkondensator am Modul kann ein sofortiger blockierender NVS-
+    // Schreibvorgang direkt nach einem SD-Schreibvorgang die Versorgung so
+    // weit einbrechen lassen, dass ein Brownout-Reset-Loop entsteht. Sowohl
+    // die Web-Speichern-Buttons (handleApiConfigPost()/"/save"-Route in
+    // WebServerManager.cpp) als auch das CRSF/Lua-Menue markieren nur noch
+    // "dirty" statt sofort zu schreiben - dieser Check hier ist seitdem die
+    // EINZIGE Stelle, an der saveConfigForce() waehrend des Betriebs
+    // tatsaechlich aufgerufen wird (Ausnahme: saveConfig() einmalig am Ende
+    // von setup()).
+    if(configDirty&&(millis()-configDirtyMs)>=500UL&&!WebServerManager::sdActivityCooldownActive())
+        saveConfigForce();
 
     // Auto-WLAN-Failsafe (siehe wifiFailsafeCheck()) - BUS_OK ist an dieser
     // Stelle im loop() fuer diesen Durchlauf bereits aktuell (CRSF-Zweig
@@ -1098,9 +1149,20 @@ void handleSound(uint8_t idx, XT_Wav_Class* snd) {
     if(Sound_on[idx]||Sound_on_web[idx]){
         snd->Volume=config.Volumen_Sound[idx];
         if(!Sound_play[idx]){Sound_play[idx]=true;snd->LoadWavFile();if(config.Mode_Sound[idx]==1)snd->RepeatForever=true;I2SAudio.Play(snd);Sound_on_web[idx]=false;}
-        else snd->Volume=config.Volumen_Sound[idx];
     }else{
         snd->RepeatForever=false;
+        // NEU v7.17: Lautstaerke auch hier weiter aktualisieren, solange der
+        // Sound noch nachspielt (Sound_play[idx] true) - z.B. beim Web-
+        // Testbutton (testSound()), der Sound_on_web[idx] bereits im selben
+        // Frame wieder zuruecksetzt, in dem die Wiedergabe gestartet wird
+        // (siehe oben). Ohne dies wirkte eine waehrend einer laufenden
+        // Testwiedergabe im Web-UI geaenderte und gespeicherte Lautstaerke
+        // erst beim naechsten Trigger, nicht auf die bereits laufende
+        // Wiedergabe (Feldbefund, siehe README-Changelog v7.17). Der Motor-
+        // Sound (idx 0, eigene Zustandsmaschine im loop()) war davon nie
+        // betroffen - dort wird die Lautstaerke ohnehin bei jedem
+        // loop()-Durchlauf im Zustand RUNNING neu gesetzt.
+        if(Sound_play[idx]) snd->Volume=config.Volumen_Sound[idx];
         if(config.Mode_Sound[idx]==2&&Sound_play[idx])I2SAudio.Stop(snd);
         // testSoundActive[idx] (Anzeige "Test Sound" im CRSF-/Lua-Menue,
         // crsfWriteParam sub==5) wird hier zurueckgesetzt, sobald das Ende

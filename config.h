@@ -167,6 +167,16 @@ struct ConfigData {
     // enableAP()/disableAP().
     bool     WifiAutoEnable;
     uint16_t WifiAutoTimeoutSec;   // 5-240s, Default 60
+
+    // WLAN dauerhaft aktiv: der AP wird in setup() fest eingeschaltet und
+    // danach von der Firmware nie mehr ausgeschaltet - GPIO13-Bootpin (siehe
+    // setup()), der manuelle Schalter (CRSF/Lua-Feld 174) und der
+    // Auto-Failsafe oben (WifiAutoEnable/WifiAutoTimeoutSec, Felder 175/176)
+    // werden dabei uebersprungen, siehe wifiFailsafeCheck() in
+    // ESP32-RC-Sound.ino. Default AN (true) - bewusst auch fuer
+    // Bestandsgeraete beim ersten Boot nach einem Firmware-Update, siehe
+    // Migrations-Default in loadConfig() (dort: p.getInt("wfalways", 1)).
+    bool     WifiAlwaysOn;
 };
 
 extern ConfigData    config;

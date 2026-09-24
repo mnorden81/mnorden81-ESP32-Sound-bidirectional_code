@@ -74,6 +74,8 @@ void Reset_all() {
     // Siehe Erklaerung in config.h - bewusst per Default AUS.
     config.WifiAutoEnable      = false;
     config.WifiAutoTimeoutSec  = 60;
+    // Siehe Erklaerung in config.h - bewusst per Default AN.
+    config.WifiAlwaysOn        = true;
     configDirty = true;
 }
 
@@ -236,6 +238,11 @@ void loadConfig() {
     // MUSS vor p.end() gelesen werden (wie alle anderen p.get*() oben).
     bool     wifiAutoEnable  = p.getInt("wfauto", 0) ? true : false;
     uint16_t wifiAutoTimeout = (uint16_t)constrain(p.getInt("wftmo", 60), 5, 240);
+    // "WLAN dauerhaft an" (siehe config.h) - Migrations-Default bewusst 1
+    // (true), NICHT 0: ein Geraet, dessen NVS den Schluessel "wfalways" noch
+    // nicht kennt (Firmware-Update von vor v7.14), soll den neuen Default
+    // ("an") automatisch bekommen, nicht "aus" per Abwesenheit des Keys.
+    bool     wifiAlwaysOn    = p.getInt("wfalways", 1) ? true : false;
     p.end();
     strncpy(config.WiFi_SSID,    ssid.c_str(),sizeof(config.WiFi_SSID)-1);
     strncpy(config.WiFi_Password,pass.c_str(),sizeof(config.WiFi_Password)-1);
@@ -247,6 +254,7 @@ void loadConfig() {
     config.Device_Name[sizeof(config.Device_Name)-1]='\0';
     config.WifiAutoEnable     = wifiAutoEnable;
     config.WifiAutoTimeoutSec = wifiAutoTimeout;
+    config.WifiAlwaysOn       = wifiAlwaysOn;
     // Siehe ausfuehrliche Erklaerung bei isValidEinSource() in
     // ESP32-RC-Sound.ino - ein ungueltiger Source_Start_Sound[i]-Rohwert
     // (z.B. aus einer inzwischen entfernten Gruppe der Mehrfachadress-
@@ -331,6 +339,7 @@ void saveConfigForce() {
     // Failsafe-Einstellungen.
     p.putInt("wfauto", config.WifiAutoEnable ? 1 : 0);
     p.putInt("wftmo",  (int)config.WifiAutoTimeoutSec);
+    p.putInt("wfalways", config.WifiAlwaysOn ? 1 : 0);
     p.end();
     configDirty=false;
     Serial.println("Config in NVS gespeichert.");

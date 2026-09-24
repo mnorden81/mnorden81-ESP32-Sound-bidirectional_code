@@ -18,12 +18,25 @@ public:
   static void enableAP();
   static void disableAP();
   static bool isApActive();
+  // v7.16: true, solange seit der letzten SD-Schreibaktivitaet (Sound-
+  // Upload/-Loeschen) noch keine SD_SAVE_COOLDOWN_MS vergangen sind - siehe
+  // markSdActivity() und die Aufrufstelle in loop() (ESP32-RC-Sound.ino).
+  // Grund: ohne Stuetzkondensator kann ein sofortiger, blockierender
+  // NVS-Flash-Schreibvorgang direkt nach einem SD-Schreibvorgang (Upload)
+  // die Spannungsversorgung kurzzeitig so weit einbrechen lassen, dass ein
+  // Brownout-Reset/Reset-Loop entsteht (in der Praxis bestaetigt).
+  static bool sdActivityCooldownActive();
   static void Webpage();
 
 private:
-  static WebServer server;
-  static int       Menu;
-  static String    valueString;
+  static WebServer     server;
+  static int           Menu;
+  static String        valueString;
+  static unsigned long lastSdActivityMs;
+  // Von jeder SD-Schreiboperation (Upload-Ende, Sound-/Backup-Loeschen)
+  // aufgerufen - startet/verlaengert die Cooldown-Zeit fuer
+  // sdActivityCooldownActive().
+  static void      markSdActivity();
   static void      handleRequest();
   static void      handleSport();
   static void      handleApiConfig();
