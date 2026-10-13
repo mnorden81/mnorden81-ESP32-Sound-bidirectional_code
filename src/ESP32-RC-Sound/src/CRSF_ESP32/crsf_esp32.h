@@ -1,7 +1,13 @@
 #ifndef CRSF_H
 #define CRSF_H
 
-#include <Arduino.h>
+// CRSF_ESP32 - gemeinsame CRSF-Bibliothek fuer Soundmodul und Multiswitch.
+// Jedes Projekt traegt eine identische Kopie dieses Ordners; Aenderungen
+// immer in allen Kopien nachziehen und CRSF_ESP32_VERSION hochzaehlen.
+// Aenderungshistorie: README.md in diesem Ordner.
+#define CRSF_ESP32_VERSION "1.0.0"
+
+#include "crsf_platform.h"
 #include "crsf_esp32_protocol.h"
 
 #define CRSF_MAX_CHANNELS 16
@@ -10,24 +16,33 @@
 #define BAUD_RATE 420000
 #define CHANNEL_MASK 0x07FF
 
+// CRC8 ueber Frame-Typ + Payload (Polynom 0xD5, Haupt-CRC jedes Frames)
+uint8_t crc8(const uint8_t* ptr, uint8_t len);
+// CRC8 fuer Command-Frames 0x32 (Polynom 0xBA, steht vor der Haupt-CRC)
+uint8_t crc8_ba(const uint8_t* ptr, size_t len, uint8_t init = 0x00);
+
 class CRSF
 {
 public:
 
     CRSF();
-    // 4. Parameter "baud" (Default = BAUD_RATE/420000, identisches Verhalten
-    // fuer Aufrufer ohne eigene Baudrate) ermoeglicht eine zweite CRSF-Instanz
-    // auf Port B mit frei waehlbarer Baudrate. serialPort wird tatsaechlich
-    // verwendet (siehe crsf_esp32.cpp), nicht hart auf &Serial2 gebunden.
+#ifdef ARDUINO
+    // 4. Parameter "baud" (Default = BAUD_RATE/420000) ermoeglicht eine
+    // zweite CRSF-Instanz (z. B. Port B des Soundmoduls) mit frei waehlbarer
+    // Baudrate. serialPort == nullptr faellt auf &Serial2 zurueck.
     void init_crsf(HardwareSerial *serialPort, uint8_t rxPin, uint8_t txPin, uint32_t baud = BAUD_RATE);
+#endif
+    // Bereits geoeffneten Datenstrom verwenden (Host-Tests, andere UARTs).
+    void attach_stream(Stream* stream) { serial_data = stream; }
+
     void read_packets(uint8_t debug);
     void send_packets(byte* buffer, size_t length, uint8_t debug);
 
     void send_rc_channels_packed();
     void send_ping();
-    // paramVersion: CRSF "Parameter Version Number" - Default 0 nur fuer
-    // Faelle ohne eigene Zaehlung; der Haupt-Aufruf (ESP32-RC-Sound.ino)
-    // uebergibt seit v7.18 die Firmware-Version, siehe dortigen Kommentar.
+    // paramVersion: CRSF "Parameter Version Number". Die Projekte uebergeben
+    // die Firmware-Version, damit Konfiguratoren (z. B. TBS Agent) eine
+    // geaenderte Parameterstruktur erkennen und neu einlesen.
     void send_device_info(const char* name, uint8_t parameter, uint8_t paramVersion = 0);
     void send_param_response_CRSF_UINT8(uint8_t param_id, uint8_t parent, const char* name, uint8_t val, uint8_t min, uint8_t max, const char* unit);
     void send_param_response_CRSF_FLOAT(uint8_t param_id, uint8_t parent,  const char* name, uint32_t val, uint32_t min, uint32_t max, uint32_t default_val, uint8_t decimal_point, uint32_t step_size, const char* unit);
@@ -38,7 +53,7 @@ public:
 
     void send_tele_GPS(int32_t latitude, int32_t longitude, uint16_t groundspeed, uint16_t heading, uint16_t altitude, uint8_t satellites);
     void send_tele_Battery_Sensor(uint16_t voltage, uint16_t current, uint32_t capacity_used, uint8_t remaining);
-    void send_tele_Vario(uint16_t v_speed);   
+    void send_tele_Vario(uint16_t v_speed);
     void send_tele_Baro_Altitude(int32_t altitude_dm, int16_t vertical_speed_cm_s);
     void send_tele_Airspeed(uint16_t speed);
     void send_tele_RPM(uint8_t rpm_source_id, std::initializer_list<int32_t> rpm_value);
@@ -54,13 +69,15 @@ public:
     void send_param(uint8_t parameter_number, uint8_t data);
     void read_param(uint8_t parameter_number, uint8_t parameter_chunk_number);
 
-    void send_command(uint8_t command_id, std::initializer_list<uint8_t> payload);
-
     uint16_t get_crfs_channels(uint8_t ch) const { return channels[ch]; }
     uint8_t get_crfs_buffer(uint8_t ch) const { return crfs_buffer[ch]; }
     // Separater Puffer fuer MWSET-Kommandos: wird beim Empfang gesichert, damit die
     // spaetere Auswertung in der .ino nicht durch nachfolgende Frames (PING/PARAM) ueberschrieben wird
     uint8_t get_cmd_buffer(uint8_t ch) const { return cmdBuffer[ch]; }
+
+    // Zuletzt empfangene Link-Statistik (0x14) und DEVICE_INFO (0x29)
+    const LinkStatistics& getLinkStatistics() const { return linkStats; }
+    const DeviceInfo&     getDeviceInfo()     const { return info; }
 
     bool getDeviceInfoReplyPending() const { return deviceInfoReplyPending; }
     bool getDeviceEntryReplyPending() const { return deviceEntryReplyPending; }
@@ -76,20 +93,18 @@ public:
     void          setDeviceAddress(uint8_t a) { deviceAddress = a; }
     uint8_t       getDeviceAddress() const { return deviceAddress; }
     unsigned long getPingTime()      const { return pingReceivedTime; }
-    void addTxEcho(uint16_t n) { txEchoBytes += n; }
 
-    void setDeviceInfoReplyPending(int newValue);
-    void setDeviceEntryReplyPending(int newValue);
-    void setDeviceReadReplyPending(int newValue);
-    void setDeviceWriteReplyPending(int newValue);
-    void setDeviceCommandReplyPending(int newValue);
+    void setDeviceInfoReplyPending(bool newValue);
+    void setDeviceEntryReplyPending(bool newValue);
+    void setDeviceReadReplyPending(bool newValue);
+    void setDeviceWriteReplyPending(bool newValue);
+    void setDeviceCommandReplyPending(bool newValue);
 
     void set_crsf_channel(uint8_t ch, uint16_t value);
 
     // ── Diagnose-Zaehler (immer aktiv) ──────────────────────────────────
-    // Uebernommen aus ESP32-GPS-Telemetry: macht "geht nicht" auf der
-    // Debug-Seite direkt sichtbar (kommen ueberhaupt Bytes an? gueltige
-    // Frames? CRC-Fehler? wird ueberhaupt gepingt?).
+    // Machen "geht nicht" auf der Debug-Seite direkt sichtbar (kommen
+    // ueberhaupt Bytes an? gueltige Frames? CRC-Fehler? wird gepingt?).
     uint32_t getRawBytesRx()    const { return rawBytesRx; }
     uint32_t getValidFrames()   const { return validFramesRx; }
     uint32_t getCrcErrors()     const { return crcErrorsRx; }
@@ -104,14 +119,9 @@ private:
     void print_channels();
     void crsfDataReceive();
 
-    // serial_data/linkStats/info sind echte Member (nicht globale
-    // Variablen), sonst wuerden sich ALLE CRSF-Instanzen denselben
-    // UART-Zeiger und dieselben Telemetrie-Puffer teilen - eine zweite
-    // Instanz auf Port B wuerde dann den Haupt-Bus (Port A) korrumpieren.
-    // Alle Zugriffe in crsf_esp32.cpp sind unqualifiziert (serial_data /
-    // linkStats.x / info.x) und binden dadurch automatisch an das jeweilige
-    // Objekt.
-    HardwareSerial* serial_data = nullptr;
+    // serial_data/linkStats/info sind Member (nicht global), damit mehrere
+    // CRSF-Instanzen (Port A und Port B) sich nicht gegenseitig stoeren.
+    Stream*         serial_data = nullptr;
     LinkStatistics  linkStats;
     DeviceInfo      info{};
 
@@ -122,16 +132,20 @@ private:
     bool deviceCommandReplyPending;
 
     uint8_t crfs_buffer[CRSF_PACKET_SIZE];
+    // Parser-Zustand bleibt ueber read_packets()-Aufrufe erhalten: ein Frame,
+    // der beim Aufruf erst halb im UART-Puffer liegt, wird beim naechsten
+    // Aufruf fertig gelesen statt verworfen.
+    uint8_t rxIndex  = 0;
+    uint8_t rxLength = 0;
     uint8_t cmdBuffer[CRSF_PACKET_SIZE] = {0}; // gesicherte Kopie des letzten MWSET-Kommandos
     uint8_t pingSource    = 0xEA;  // Source des letzten DEVICE_PING
-    uint16_t txEchoBytes  = 0;     // Gesendete Bytes zum Ueberspringen (Echo-Filter)
     uint8_t paramReadIndex  = 0;   // Angefragter Parameter-Index
     uint8_t paramWriteIndex = 0;   // Zu schreibender Parameter-Index
     uint8_t paramWriteValue = 0;   // Zu schreibender Wert
     uint8_t paramReadSource  = 0xEF; // Source des PARAMETER_READ -> Destination der Antwort
     uint8_t deviceAddress = CRSF_ADDRESS_FLIGHT_CONTROLLER; // eigene CRSF-Adresse (0xC0..0xCF aus WM-Adresse; Default 0xC8)
     unsigned long pingReceivedTime = 0; // Zeitpunkt des letzten Broadcast-Ping (fuer Slot-Delay)
-    uint16_t channels[CRSF_MAX_CHANNELS];
+    uint16_t channels[CRSF_MAX_CHANNELS] = {0};
 
     // Diagnose-Zaehler (siehe Getter oben)
     uint32_t rawBytesRx    = 0;

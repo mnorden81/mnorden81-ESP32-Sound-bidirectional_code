@@ -108,8 +108,9 @@
                           Migration alter Datenformate.
    WebServerManager.cpp   Weboberflaeche, REST-API, OTA-Update.
    XT_I2S_Audio.cpp/.h    WAV-Wiedergabe ueber I2S, SD-Kartenzugriff.
-   crsf_esp32.cpp/.h      CRSF-Protokoll (Frame-Parsing, Telemetrie,
-                          Geraete-Discovery/Parameter-Handshake).
+   src/CRSF_ESP32/        Gemeinsame CRSF-Bibliothek (Frame-Parsing,
+                          Telemetrie, Discovery/Parameter-Handshake);
+                          identische Kopie auch im Multiswitch-Projekt.
    sport_lipo.cpp/.h      S.Port-Telemetrie (Port B, LiPo-Zellspannungen).
    gps_speed.cpp/.h       GPS-Auswertung (Port C) fuer CRSF-GPS-Telemetrie.
    port_function.cpp/.h   Port-B-Rollen-Registry (siehe oben).
@@ -123,14 +124,14 @@
 #include "XT_I2S_Audio.h"
 #include <WiFi.h>
 #include "sbus.h"
-#include "crsf_esp32.h"
+#include "src/CRSF_ESP32/crsf_esp32.h"
 #include "config.h"
 #include "WebServerManager.h"
 #include "sport_lipo.h"
 #include "gps_speed.h"   // GPS-Geschwindigkeit (Port C)
 #include "port_function.h"   // Port-B-Rollen-Registry
 
-uint16_t Version = 718;  // Firmware-Version fuer Web-/Lua-Anzeige: major*100+minor (718 -> "7.18")
+uint16_t Version = 719;  // Firmware-Version fuer Web-/Lua-Anzeige: major*100+minor (719 -> "7.19")
 char versionString[6];
 bool gpsPinConflict = false; // true, wenn Port C (GPS) UND SBUS gleichzeitig gewaehlt sind (GPIO27-Konflikt, siehe setup())
 // Ob der AP gerade aktiv ist, wird NICHT hier gespiegelt: loop() fragt dafuer

@@ -8,7 +8,7 @@
 #include "XT_I2S_Audio.h"
 #include "sport_lipo.h"
 #include "gps_speed.h"
-#include "crsf_esp32.h"
+#include "src/CRSF_ESP32/crsf_esp32.h"
 #include "port_function.h"   // Port-B-Rollen-Registry
 #include <Update.h>          // Firmware-Update per WLAN (OTA), siehe handleApiOtaUpdate*()
 

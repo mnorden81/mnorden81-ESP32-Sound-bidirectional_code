@@ -25,7 +25,7 @@
  */
 
 #include "sport_lipo.h"
-#include "crsf_esp32.h"
+#include "src/CRSF_ESP32/crsf_esp32.h"
 #include "config.h"
 
 // Zugriff auf den CRSF-Instanz aus dem Hauptsketch

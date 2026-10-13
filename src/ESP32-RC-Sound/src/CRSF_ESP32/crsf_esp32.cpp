@@ -6,6 +6,14 @@
 // ueberschreibt. Alle Verwendungsstellen unten sind unqualifiziert und
 // binden dadurch automatisch an das jeweilige Objekt.
 
+#ifndef ARDUINO
+// Host-Ersatz fuer millis() und Serial (siehe crsf_platform.h)
+static unsigned long crsfHostMillis = 0;
+unsigned long millis() { return crsfHostMillis; }
+void crsf_set_millis(unsigned long ms) { crsfHostMillis = ms; }
+CrsfNullSerial Serial;
+#endif
+
 #define DEBUG_CRSF false
 #define DEBUG_CRSF_TYPE false
 #define DEBUG_CRSF_SEND false
@@ -37,23 +45,26 @@ unsigned char crc8tab[256] = {
     0xD6, 0x03, 0xA9, 0x7C, 0x28, 0xFD, 0x57, 0x82, 0xFF, 0x2A, 0x80, 0x55, 0x01, 0xD4, 0x7E, 0xAB,
     0x84, 0x51, 0xFB, 0x2E, 0x7A, 0xAF, 0x05, 0xD0, 0xAD, 0x78, 0xD2, 0x07, 0x53, 0x86, 0x2C, 0xF9};
 
+// Polynom 0xBA, Tabelle aus der CRSF-Spezifikation (identisch mit der
+// WM-Firmware, wmucpp include_stm32/crc.h). Die fruehere Tabelle passte zu
+// keinem Polynom.
 const uint8_t crc8_ba_tab[256] = {
-    0x00, 0xBA, 0xB3, 0x09, 0xA7, 0x1D, 0x14, 0xAE, 0xD3, 0x69, 0x60, 0xDA, 0x74, 0xCE, 0xC7, 0x7D,
-    0xAB, 0x11, 0x18, 0xA2, 0x0C, 0xB6, 0xBF, 0x05, 0x78, 0xC2, 0xCB, 0x71, 0xDF, 0x65, 0x6C, 0xD6,
-    0x9D, 0x27, 0x2E, 0x94, 0x3A, 0x80, 0x89, 0x33, 0x4E, 0xF4, 0xFD, 0x47, 0xE9, 0x53, 0x5A, 0xE0,
-    0x36, 0x8C, 0x85, 0x3F, 0x91, 0x2B, 0x22, 0x98, 0xE5, 0x5F, 0x56, 0xEC, 0x42, 0xF8, 0xF1, 0x4B,
-    0x3B, 0x81, 0x88, 0x32, 0x9C, 0x26, 0x2F, 0x95, 0xE8, 0x52, 0x5B, 0xE1, 0x4F, 0xF5, 0xFC, 0x46,
-    0x90, 0x2A, 0x23, 0x99, 0x37, 0x8D, 0x84, 0x3E, 0x43, 0xF9, 0xF0, 0x4A, 0xE4, 0x5E, 0x57, 0xED,
-    0xA6, 0x1C, 0x15, 0xAF, 0x01, 0xBB, 0xB2, 0x08, 0x75, 0xCF, 0xC6, 0x7C, 0xD2, 0x68, 0x61, 0xDB,
-    0x0D, 0xB7, 0xBE, 0x04, 0xAA, 0x10, 0x19, 0xA3, 0xDE, 0x64, 0x6D, 0xD7, 0x79, 0xC3, 0xCA, 0x70,
-    0x76, 0xCC, 0xC5, 0x7F, 0xD1, 0x6B, 0x62, 0xD8, 0xA5, 0x1F, 0x16, 0xAC, 0x02, 0xB8, 0xB1, 0x0B,
-    0xDD, 0x67, 0x6E, 0xD4, 0x7A, 0xC0, 0xC9, 0x73, 0x0E, 0xB4, 0xBD, 0x07, 0xA9, 0x13, 0x1A, 0xA0,
-    0xEB, 0x51, 0x58, 0xE2, 0x4C, 0xF6, 0xFF, 0x45, 0x38, 0x82, 0x8B, 0x31, 0x9F, 0x25, 0x2C, 0x96,
-    0x40, 0xFA, 0xF3, 0x49, 0xE7, 0x5D, 0x54, 0xEE, 0x93, 0x29, 0x20, 0x9A, 0x34, 0x8E, 0x87, 0x3D,
-    0x4D, 0xF7, 0xFE, 0x44, 0xEA, 0x50, 0x59, 0xE3, 0x9E, 0x24, 0x2D, 0x97, 0x39, 0x83, 0x8A, 0x30,
-    0xE6, 0x5C, 0x55, 0xEF, 0x41, 0xFB, 0xF2, 0x48, 0x35, 0x8F, 0x86, 0x3C, 0x92, 0x28, 0x21, 0x9B,
-    0xD0, 0x6A, 0x63, 0xD9, 0x77, 0xCD, 0xC4, 0x7E, 0x03, 0xB9, 0xB0, 0x0A, 0xA4, 0x1E, 0x17, 0xAD,
-    0x7B, 0xC1, 0xC8, 0x72, 0xDC, 0x66, 0x6F, 0xD5, 0xA8, 0x12, 0x1B, 0xA1, 0x0F, 0xB5, 0xBC, 0x06};
+    0x00, 0xBA, 0xCE, 0x74, 0x26, 0x9C, 0xE8, 0x52, 0x4C, 0xF6, 0x82, 0x38, 0x6A, 0xD0, 0xA4, 0x1E,
+    0x98, 0x22, 0x56, 0xEC, 0xBE, 0x04, 0x70, 0xCA, 0xD4, 0x6E, 0x1A, 0xA0, 0xF2, 0x48, 0x3C, 0x86,
+    0x8A, 0x30, 0x44, 0xFE, 0xAC, 0x16, 0x62, 0xD8, 0xC6, 0x7C, 0x08, 0xB2, 0xE0, 0x5A, 0x2E, 0x94,
+    0x12, 0xA8, 0xDC, 0x66, 0x34, 0x8E, 0xFA, 0x40, 0x5E, 0xE4, 0x90, 0x2A, 0x78, 0xC2, 0xB6, 0x0C,
+    0xAE, 0x14, 0x60, 0xDA, 0x88, 0x32, 0x46, 0xFC, 0xE2, 0x58, 0x2C, 0x96, 0xC4, 0x7E, 0x0A, 0xB0,
+    0x36, 0x8C, 0xF8, 0x42, 0x10, 0xAA, 0xDE, 0x64, 0x7A, 0xC0, 0xB4, 0x0E, 0x5C, 0xE6, 0x92, 0x28,
+    0x24, 0x9E, 0xEA, 0x50, 0x02, 0xB8, 0xCC, 0x76, 0x68, 0xD2, 0xA6, 0x1C, 0x4E, 0xF4, 0x80, 0x3A,
+    0xBC, 0x06, 0x72, 0xC8, 0x9A, 0x20, 0x54, 0xEE, 0xF0, 0x4A, 0x3E, 0x84, 0xD6, 0x6C, 0x18, 0xA2,
+    0xE6, 0x5C, 0x28, 0x92, 0xC0, 0x7A, 0x0E, 0xB4, 0xAA, 0x10, 0x64, 0xDE, 0x8C, 0x36, 0x42, 0xF8,
+    0x7E, 0xC4, 0xB0, 0x0A, 0x58, 0xE2, 0x96, 0x2C, 0x32, 0x88, 0xFC, 0x46, 0x14, 0xAE, 0xDA, 0x60,
+    0x6C, 0xD6, 0xA2, 0x18, 0x4A, 0xF0, 0x84, 0x3E, 0x20, 0x9A, 0xEE, 0x54, 0x06, 0xBC, 0xC8, 0x72,
+    0xF4, 0x4E, 0x3A, 0x80, 0xD2, 0x68, 0x1C, 0xA6, 0xB8, 0x02, 0x76, 0xCC, 0x9E, 0x24, 0x50, 0xEA,
+    0x48, 0xF2, 0x86, 0x3C, 0x6E, 0xD4, 0xA0, 0x1A, 0x04, 0xBE, 0xCA, 0x70, 0x22, 0x98, 0xEC, 0x56,
+    0xD0, 0x6A, 0x1E, 0xA4, 0xF6, 0x4C, 0x38, 0x82, 0x9C, 0x26, 0x52, 0xE8, 0xBA, 0x00, 0x74, 0xCE,
+    0xC2, 0x78, 0x0C, 0xB6, 0xE4, 0x5E, 0x2A, 0x90, 0x8E, 0x34, 0x40, 0xFA, 0xA8, 0x12, 0x66, 0xDC,
+    0x5A, 0xE0, 0x94, 0x2E, 0x7C, 0xC6, 0xB2, 0x08, 0x16, 0xAC, 0xD8, 0x62, 0x30, 0x8A, 0xFE, 0x44};
 // Calculate checksum
 uint8_t crc8(const uint8_t * ptr, uint8_t len)
 {
@@ -63,7 +74,7 @@ uint8_t crc8(const uint8_t * ptr, uint8_t len)
   return crc;
 }
 
-uint8_t crc8_ba(const uint8_t* ptr, size_t len, uint8_t init = 0x00) {
+uint8_t crc8_ba(const uint8_t* ptr, size_t len, uint8_t init) {
     uint8_t crc = init;
     for (size_t i = 0; i < len; ++i) {
         crc = crc8_ba_tab[crc ^ ptr[i]];
@@ -129,15 +140,18 @@ void CRSF::updateChannels() {
 }
 
 void CRSF::updateLink_Statistics() {
+    // Reihenfolge laut CRSF-Spezifikation (0x14). Vor v1.0.0 fehlte
+    // up_rssi_ant2, dadurch waren alle Felder ab LQ um ein Byte verschoben.
     linkStats.uplinkRSSI     = crfs_buffer[3];
-    linkStats.uplinkLQ       = crfs_buffer[4];
-    linkStats.uplinkSNR      = (int8_t)crfs_buffer[5];
-    linkStats.activeAntenna  = crfs_buffer[6];
-    linkStats.rfMode         = crfs_buffer[7];
-    linkStats.txPower        = crfs_buffer[8];
-    linkStats.downlinkRSSI   = crfs_buffer[9];
-    linkStats.downlinkLQ     = crfs_buffer[10];
-    linkStats.downlinkSNR    = (int8_t)crfs_buffer[11];
+    linkStats.uplinkRSSI2    = crfs_buffer[4];
+    linkStats.uplinkLQ       = crfs_buffer[5];
+    linkStats.uplinkSNR      = (int8_t)crfs_buffer[6];
+    linkStats.activeAntenna  = crfs_buffer[7];
+    linkStats.rfMode         = crfs_buffer[8];
+    linkStats.txPower        = crfs_buffer[9];
+    linkStats.downlinkRSSI   = crfs_buffer[10];
+    linkStats.downlinkLQ     = crfs_buffer[11];
+    linkStats.downlinkSNR    = (int8_t)crfs_buffer[12];
     linkStats.lastUpdate     = millis();
 
 /*
@@ -186,23 +200,23 @@ Serial.printf("  ➤ Param Version    : %d\n", info.parameterVersionNumber);
 */
 }
 
-void CRSF::setDeviceInfoReplyPending(int newValue) {
+void CRSF::setDeviceInfoReplyPending(bool newValue) {
     deviceInfoReplyPending = newValue;
 }
 
-void CRSF::setDeviceEntryReplyPending(int newValue) {
+void CRSF::setDeviceEntryReplyPending(bool newValue) {
     deviceEntryReplyPending = newValue;
 }
 
-void CRSF::setDeviceReadReplyPending(int newValue) {
+void CRSF::setDeviceReadReplyPending(bool newValue) {
     deviceReadReplyPending = newValue;
 }
 
-void CRSF::setDeviceWriteReplyPending(int newValue) {
+void CRSF::setDeviceWriteReplyPending(bool newValue) {
     deviceWriteReplyPending = newValue;
 }
 
-void CRSF::setDeviceCommandReplyPending(int newValue) {
+void CRSF::setDeviceCommandReplyPending(bool newValue) {
     deviceCommandReplyPending = newValue;
 }
 
@@ -211,16 +225,19 @@ void CRSF::set_crsf_channel(uint8_t ch, uint16_t value) {
         channels[ch] = value;
 }
 
+#ifdef ARDUINO
 void CRSF::init_crsf(HardwareSerial *serialPort, uint8_t rxPin, uint8_t txPin, uint32_t baud) {
   // serialPort wird tatsaechlich verwendet (nicht hart "&Serial2"), damit
   // eine zweite Instanz auf Port B nicht ebenfalls auf Serial2 landet und
-  // Port A den UART wegnimmt.
-  serial_data = serialPort;
-  serial_data->begin(baud, SERIAL_8N1, rxPin, txPin);
+  // Port A den UART wegnimmt. nullptr faellt auf Serial2 zurueck.
+  HardwareSerial* port = serialPort ? serialPort : &Serial2;
+  port->begin(baud, SERIAL_8N1, rxPin, txPin);
+  serial_data = port;
 #if DEBUG_CRSF
   Serial.println("Initializing CRSF...");
 #endif
 }
+#endif
 
 void CRSF::print_channels() {
     Serial.print("Channels: ");
@@ -359,7 +376,13 @@ void CRSF::send_packets(byte* buffer, size_t length, uint8_t debug) {
 
 // Read CRSF packets from serial port
 void CRSF::read_packets(uint8_t debug) {
-    uint8_t data, length, byte_index = 0;
+    // byte_index/length sind Referenzen auf Member: der Zustand ueberlebt
+    // das Ende dieses Aufrufs, ein halb empfangener Frame wird beim
+    // naechsten Aufruf vervollstaendigt (vorher lokale Variablen - der
+    // Rest des Frames wurde dann als neuer Frame gelesen und verworfen).
+    uint8_t data;
+    uint8_t& byte_index = rxIndex;
+    uint8_t& length = rxLength;
 
     while (serial_data->available() > 0) {
         data = serial_data->read();
@@ -405,7 +428,7 @@ void CRSF::read_packets(uint8_t debug) {
                 crsfDataReceive();
                 if (debug) {
                     Serial.print("RX-Buffer: ");
-                    for (size_t i = 0; i < length; i++) {
+                    for (size_t i = 0; i < (size_t)(length + 2); i++) {
                         Serial.print(crfs_buffer[i], HEX); // Ausgabe in Hexadezimalformat
                         Serial.print(" ");
                     }
@@ -834,7 +857,10 @@ void CRSF::send_param_response_CRSF_FOLDER(uint8_t param_id, uint8_t parent, con
     uint8_t len_name = strlen(name) + 1; // len + null terminator
     uint8_t len_children = children.size();
 
-    uint8_t len = 9 + len_name + len_children + 1; // +1 fuer 0xFF Terminator
+    // Typ, Ziel, Quelle, Nr, Chunks, Parent, Datentyp (7) + Name + Kinder
+    // + 0xFF-Terminator + CRC. Vor v1.0.0 war len um 1 zu gross, dadurch
+    // ging ein uninitialisiertes Byte mit auf den Bus.
+    uint8_t len = 9 + len_name + len_children;
     uint8_t packet[64];
     packet[0] = CRSF_SYNC_byte;   // sync
     packet[1] = len;    // len
@@ -857,7 +883,7 @@ void CRSF::send_param_response_CRSF_FOLDER(uint8_t param_id, uint8_t parent, con
     }
     
     //packet[packet_count + len_name] = 0xFF;        // children Liste mit 0xFF abschließen
-    packet[9 + len_name + len_children] = 0xFF;        // children Liste mit 0xFF abschließen ????
+    packet[9 + len_name + len_children] = 0xFF;        // children Liste mit 0xFF abschliessen
 
     packet[packet[1]+1] = crc8(&packet[2], packet[1] - 1);
 
@@ -999,7 +1025,7 @@ void CRSF::send_command_MWSET4M(uint8_t adress_1, uint8_t stateH_1, uint8_t stat
 
 void CRSF::send_command_MWPROP(uint8_t adress, uint8_t channel, uint8_t duty ) {
 
-    uint8_t len = 9;
+    uint8_t len = 10; // inkl. Command_CRC8 (fehlte vor v1.0.0)
     uint8_t packet[64];
     packet[0] = CRSF_SYNC_byte;   // sync
     packet[1] = len;    // len
@@ -1012,7 +1038,11 @@ void CRSF::send_command_MWPROP(uint8_t adress, uint8_t channel, uint8_t duty ) {
     packet[7] = adress;  // switch-address (0 …​ 255)
     packet[8] = channel; // number of the output channel
     packet[9] = duty;    // duty for the output channel
-    
+
+    // Command_CRC8 (Polynom 0xBA) über [Frame Type (0x32)] + [Destination] + [Origin] + [Command ID] + [Payload]
+    packet[10] = crc8_ba(&packet[2], len - 2);
+
+    // Frame CRC8 (Polynom 0xD5) über [type ... Command_CRC8]
     packet[packet[1]+1] = crc8(&packet[2], packet[1] - 1);
 
     send_packets(packet, len + 2 , 0);
@@ -1062,41 +1092,6 @@ void CRSF::read_param(uint8_t parameter_number, uint8_t parameter_chunk_number){
 #endif     
 }
 
-// Als Member "CRSF::send_command(...)" definiert, wie in crsf_esp32.h
-// deklariert. Anmerkung: send_packets() wird hier unten nicht aufgerufen,
-// das fertig berechnete Paket wird also nicht gesendet - die Funktion wird
-// aktuell nirgends aufgerufen, daher bleibt das hier nur vermerkt statt
-// spekulativ mit veraendertem Verhalten "repariert".
-void CRSF::send_command(uint8_t command_id, std::initializer_list<uint8_t> payload) {   
-
-    uint8_t len_payload = payload.size();
-
-    uint8_t len = 5 + len_payload;
-    uint8_t packet[64];
-    packet[0] = CRSF_SYNC_byte;   // sync
-    packet[1] = len;    // len
-    packet[2] = CRSF_FRAMETYPE_COMMAND;   // type
-    packet[3] = CRSF_ADDRESS_FLIGHT_CONTROLLER; 
-    packet[4] = CRSF_ADDRESS_RADIO_TRANSMITTER;
-    packet[5] = command_id; // Command ID
-
-   // List_of_payload
-    int packet_count = 6;
-    for (uint8_t c : payload) {
-        packet[packet_count] = c; 
-        packet_count ++;
-    }
-    
-    //packet[packet_count + len_name] = 0xFF;        // children Liste mit 0xFF abschließen
-    packet[5 + len_payload] = crc8_ba(&packet[2], packet[1] - 1);        // children Liste mit 0xFF abschließen ????
-    
-    packet[packet[1]+1] = crc8(&packet[2], packet[1] - 1);
-
-#if DEBUG_CRSF_SEND
-    Serial.println("📤 Command send");
-#endif     
-}
-
 //******************Telemetry
 
 void CRSF::send_tele_GPS(int32_t latitude, int32_t longitude, uint16_t groundspeed, uint16_t heading, uint16_t altitude, uint8_t satellites) {
@@ -1122,8 +1117,8 @@ void CRSF::send_tele_GPS(int32_t latitude, int32_t longitude, uint16_t groundspe
     packet[13] = ((heading >> 8) & 0xFF);             // heading   big endian 
     packet[14] = (heading & 0xFF);                    // heading   big endian
 
-    packet[15] = ((altitude + 1000 >> 8) & 0xFF);     // altitude + 1000 offset  big endian 
-    packet[16] = (altitude + 1000 & 0xFF);            // altitude + 1000 offset  big endian    
+    packet[15] = (((altitude + 1000) >> 8) & 0xFF);     // altitude + 1000 offset  big endian 
+    packet[16] = ((altitude + 1000) & 0xFF);            // altitude + 1000 offset  big endian    
 
     packet[17] = satellites;                          // satellites 0-100%
 

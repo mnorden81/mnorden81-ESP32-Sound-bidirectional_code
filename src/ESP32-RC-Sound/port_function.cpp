@@ -9,7 +9,7 @@
 
 #include "port_function.h"
 #include "sport_lipo.h"
-#include "crsf_esp32.h"
+#include "src/CRSF_ESP32/crsf_esp32.h"
 #include <cstring>
 
 // Port B kann als zweite, unabhaengige CRSF-Instanz laufen (siehe

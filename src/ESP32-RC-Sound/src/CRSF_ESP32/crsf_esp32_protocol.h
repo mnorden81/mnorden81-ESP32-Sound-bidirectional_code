@@ -1,3 +1,8 @@
+#ifndef CRSF_ESP32_PROTOCOL_H
+#define CRSF_ESP32_PROTOCOL_H
+
+#include "crsf_platform.h"
+
 #define CRSF_SYNC_byte 0xC8
 
 //CRSF FRAMETYPE Stand 03.06.2025 https://github.com/crsf-wg/crsf/wiki/Packet-Types
@@ -79,15 +84,16 @@
 #define CRSF_OUT_OF_RANGE 0x7F
 
 struct LinkStatistics {
-  uint8_t uplinkRSSI = 0;       // Sender → Empfänger RSSI (dBm)
+  uint8_t uplinkRSSI = 0;       // Sender → Empfänger RSSI Antenne 1 (dBm * -1)
+  uint8_t uplinkRSSI2 = 0;      // Sender → Empfänger RSSI Antenne 2 (dBm * -1)
   uint8_t uplinkLQ = 0;         // Link Quality (%)
   int8_t  uplinkSNR = 0;        // Signal-Rausch-Verhältnis (dB)
 
   uint8_t activeAntenna = 0;    // 0 = Ant1, 1 = Ant2, 2 = Diversity
   uint8_t rfMode = 0;           // RF Mode (z. B. 0 = 4Hz, 1 = 50Hz, …)
-  uint8_t txPower = 0;          // Sendeleistung (mW)
+  uint8_t txPower = 0;          // Sendeleistung als Index: 0=0mW, 1=10, 2=25, 3=100, 4=500, 5=1000, 6=2000, 7=250, 8=50 mW
 
-  uint8_t downlinkRSSI = 0;     // Empfänger → Sender RSSI (dBm)
+  uint8_t downlinkRSSI = 0;     // Empfänger → Sender RSSI (dBm * -1)
   uint8_t downlinkLQ = 0;       // Link Quality (%)
   int8_t  downlinkSNR = 0;      // Signal-Rausch-Verhältnis (dB)
 
@@ -102,3 +108,5 @@ struct DeviceInfo {
   uint8_t  parametersTotal;
   uint8_t  parameterVersionNumber;
 };
+
+#endif

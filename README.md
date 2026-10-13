@@ -90,7 +90,7 @@ Benötigte Bibliotheken:
 - Bolder Flight Systems SBUS 8.1.4
 - EspSoftwareSerial 8.2.0 und TinyGPSPlus 1.1.0 (für GPS, werden immer mitkompiliert)
 
-Der CRSF-Code (ursprünglich [CRSF_ESP32](https://github.com/Ziege-One/CRSF_ESP32)) liegt als angepasste Kopie direkt im Sketch (`crsf_esp32.*`), eine separate Bibliothek ist nicht nötig.
+Der CRSF-Code (ursprünglich [CRSF_ESP32](https://github.com/Ziege-One/CRSF_ESP32)) liegt als gemeinsame Bibliothek im Sketch unter `src/CRSF_ESP32/`. Die Arduino-IDE kompiliert diesen Unterordner automatisch mit, eine separate Installation ist nicht nötig. Dieselbe Bibliothek liegt als identische Kopie auch im Multiswitch-Projekt; Änderungen dort mit nachziehen (siehe `src/CRSF_ESP32/README.md`).
 
 Im Menü **Werkzeuge → Partition Scheme** ein OTA-fähiges Schema wählen, sonst funktioniert das Firmware-Update per WLAN nicht. Der Ordner `lib/` und `test/` gehören **nicht** in den Sketch-Ordner — nur der Inhalt von `src/`, sonst meldet der Compiler „multiple definition of …".
 
@@ -152,7 +152,7 @@ src/ESP32-RC-Sound/
   config.cpp/.h          Persistente Konfiguration (NVS), Migration
   WebServerManager.cpp   Weboberfläche, REST-API, OTA
   XT_I2S_Audio.cpp/.h    WAV-Wiedergabe über I2S, SD-Zugriff
-  crsf_esp32.cpp/.h      CRSF-Protokoll, Telemetrie, Discovery
+  src/CRSF_ESP32/        Gemeinsame CRSF-Bibliothek (Protokoll, Telemetrie, Discovery)
   sport_lipo.cpp/.h      S.Port-Telemetrie (Port B)
   gps_speed.cpp/.h       GPS-Auswertung (Port C)
   port_function.cpp/.h   Port-B-Rollen-Registry
@@ -168,7 +168,7 @@ CI baut bei jedem Push die Firmware und führt die Host-Tests aus.
 
 ## Versionsstand
 
-Aktuell: **v7.18**
+Aktuell: **v7.19**
 
 Wichtige Schritte der V7-Linie:
 
@@ -183,6 +183,7 @@ Wichtige Schritte der V7-Linie:
 | 7.15 | Kein sofortiger `enableAP()`-Aufruf mehr aus Web-/CRSF-Handlern (Risikominimierung) |
 | 7.16 | SD-Aktivitäts-Cooldown vor NVS-Schreibvorgängen (Feldbefund: Brownout-Reset-Loop bei ungepuffertem Modul ohne Stützkondensator direkt nach SD-Schreibzugriff); alle Config-Speicherpfade vereinheitlicht über den debounced Schreibvorgang in `loop()` |
 | 7.17 | Fix: Lautstärkeänderung während einer laufenden Web-Testwiedergabe (Sound-Slots 1–24) wirkte bisher erst beim nächsten Trigger, nicht auf die bereits laufende Wiedergabe (`handleSound()`) |
+| 7.19 | CRSF-Code als gemeinsame Bibliothek `src/CRSF_ESP32/` (v1.0.0, auch im Multiswitch). Fixes laut CRSF-Spezifikation: Empfangs-Parser verliert keine Frames mehr, die über zwei Aufrufe verteilt ankommen (vorher verloren und als CRC-Fehler gezählt); Link-Statistik-Felder korrekt zugeordnet; Command-CRC (0xBA) korrigiert; FOLDER-Eintrag ohne überzähliges Byte. Host-Tests in `test/test_crsf`. |
 | 7.18 | Fix: CRSF-"Parameter Version Number" im DEVICE_INFO-Frame war fest `0x00` (`send_device_info()`, crsf_esp32.cpp) – Konfiguratoren mit persistentem Parameter-Cache (TBS Agent) erkannten dadurch neue/geänderte Lua-Felder nicht automatisch und zeigten weiter ihr altes Menü. Jetzt wird die Firmware-Version mitgegeben, die ohnehin bei jeder Änderung hochgezählt wird. EdgeTX-Lua-Skripte waren nicht betroffen (bauen ihr Menü bei jedem Lauf neu auf). |
 
 Dieses Repository enthält nur die V7-Linie. Ältere Stände (V5, V6) sind getrennte Projekte und liegen nicht hier.
