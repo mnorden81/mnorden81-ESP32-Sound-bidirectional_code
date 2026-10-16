@@ -4,6 +4,8 @@ Soundmodul-Firmware für RC-Modelle auf ESP32-Basis. Spielt WAV-Dateien von eine
 
 Für Fahrzeuge, Baumaschinen, Panzer, Boote — überall dort, wo ein Modell klingen soll wie das Original.
 
+Projektbeschreibung als Word-Dokument: [`docs/Projektbeschreibung.docx`](docs/Projektbeschreibung.docx)
+
 ---
 
 ## Funktionen
@@ -158,6 +160,7 @@ src/ESP32-RC-Sound/
   port_function.cpp/.h   Port-B-Rollen-Registry
 lib/port_registry/       Hardwareunabhängiger Spiegel der Registry
 test/                    Unity-Tests, laufen ohne ESP32
+docs/                    Projektbeschreibung (Word)
 ```
 
 `lib/port_registry/` spiegelt die Port-B-Logik hardwareunabhängig, damit sie per `pio test -e native` ohne Board geprüft werden kann. **Beide Seiten müssen bei Änderungen von Hand synchron gehalten werden.**
